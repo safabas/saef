@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>أداة المزوّد — إصدار أكواد التفعيل</title>
+<style>
+body{font-family:Tahoma,Arial,sans-serif;background:#f5f3ee;color:#1d2430;max-width:720px;margin:0 auto;padding:12px}
+.box{background:#fff;border:1px solid #e5e1d8;border-radius:12px;padding:14px;margin-bottom:12px}
+input,select,textarea{width:100%;font:inherit;padding:10px;border:1px solid #d9d4c8;border-radius:9px;margin:4px 0 8px}
+button{font:inherit;border:0;border-radius:9px;padding:10px 14px;background:#b7791f;color:#fff;font-weight:600;margin:2px}
+button.s{background:#eee;color:#222}.m{color:#6b7280;font-size:13px}.bad{color:#c0392b}.ok{color:#0f766e}
+textarea{direction:ltr;font-size:12px}
+</style></head><body>
+<h2>أداة المزوّد — خاصة بك فقط</h2><div class="m">لا ترسل هذا الملف لأحد. المفتاح الخاص محفوظ داخل هذا المتصفح.</div>
+<div class="box"><b>1) المفاتيح (مرة واحدة)</b><div id="ks" class="m"></div>
+<button id="gk">إنشاء مفاتيح جديدة</button><button class="s" id="bk">تنزيل نسخة احتياطية للمفتاح الخاص</button><button class="s" id="ik">استيراد نسخة احتياطية</button></div>
+<div class="box"><b>2) تجهيز نسخة التطبيق للزبائن</b><div class="m">اختر ملف generator_app.html ← ينزل لك ملف مجهّز بمفتاحك العام. هذا الملف هو الذي تعطيه للزبائن.</div><input type="file" id="af" accept=".html"><div id="as"></div></div>
+<div class="box"><b>3) إصدار كود تفعيل</b>
+<label>اسم الزبون</label><input id="nm"><label>رقم الجهاز (يرسله الزبون من شاشة التفعيل)</label><input id="dv" style="direction:ltr" placeholder="XXXX-XXXX-XXXX">
+<label>المدة</label><select id="du"><option value="1">شهر</option><option value="3">3 أشهر</option><option value="6">6 أشهر</option><option value="12" selected>سنة</option><option value="0">دائم</option></select>
+<button id="mk">إصدار الكود</button><textarea id="out" rows="5" readonly></textarea><div id="os" class="bad"></div>
+<button class="s" id="cp">نسخ</button><button class="s" id="wa">إرسال بواتساب</button></div>
+<div class="box"><b>سجل الأكواد الصادرة</b><div id="log" class="m"></div></div>
+<script>
+"use strict";
+const $=s=>document.querySelector(s),LS=localStorage,EC={name:"ECDSA",namedCurve:"P-256"};
+// TOOLBEGIN
+const b64u=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+const norm=d=>String(d).toUpperCase().replace(/[^A-Z0-9]/g,"");
+async function makeCode(priv,dev,exp,name){const pl=["GEN1",norm(dev),exp,name.replace(/\|/g," ")].join("|");
+ const k=await crypto.subtle.importKey("jwk",priv,EC,false,["sign"]);
+ const sg=await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},k,new TextEncoder().encode(pl));
+ return b64u(new TextEncoder().encode(pl))+"."+b64u(sg)}
+const pubOf=p=>({kty:p.kty,crv:p.crv,x:p.x,y:p.y});
+const injectKey=(html,pub)=>html.replace(/\/\*PUB\*\/[\s\S]*?\/\*END\*\//,()=>"/*PUB*/"+JSON.stringify(pub)+"/*END*/");
+// TOOLEND
+const priv=()=>LS.vp?JSON.parse(LS.vp):null;
+function ks(){$("#ks").innerHTML=priv()?'<span class="ok">✔ المفاتيح جاهزة</span> — احتفظ بنسخة احتياطية، فإذا ضاعت لن تستطيع إصدار أكواد للنسخ الموزعة.':'<span class="bad">لا توجد مفاتيح بعد.</span>'}
+$("#gk").onclick=async()=>{if(priv()&&!confirm("يوجد مفتاح! إنشاء مفتاح جديد يبطل كل النسخ الموزعة سابقاً. متابعة؟"))return;
+ const k=await crypto.subtle.generateKey(EC,true,["sign","verify"]);LS.vp=JSON.stringify(await crypto.subtle.exportKey("jwk",k.privateKey));ks()};
+$("#bk").onclick=()=>{if(!priv())return alert("لا توجد مفاتيح");const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([LS.vp]));a.download="license-private-key-BACKUP.json";a.click()};
+$("#ik").onclick=()=>{const i=document.createElement("input");i.type="file";i.onchange=async()=>{try{const j=JSON.parse(await i.files[0].text());if(!j.d)throw 0;LS.vp=JSON.stringify(j);ks()}catch(e){alert("ملف غير صالح")}};i.click()};
+$("#af").onchange=async e=>{if(!priv())return $("#as").innerHTML='<span class="bad">أنشئ المفاتيح أولاً</span>';
+ const t=await e.target.files[0].text();if(!/\/\*PUB\*\//.test(t))return $("#as").innerHTML='<span class="bad">هذا ليس ملف التطبيق الصحيح</span>';
+ const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([injectKey(t,pubOf(priv()))],{type:"text/html"}));a.download="generator_app_licensed.html";a.click();$("#as").innerHTML='<span class="ok">تم، وُضع المفتاح العام داخل الملف.</span>'};
+const L=()=>JSON.parse(LS.vl||"[]");
+function log(){$("#log").innerHTML=L().slice().reverse().map(x=>`${x.d} — ${x.n} — ${x.v} — ${x.e}`).join("<br>")||"—"}
+$("#mk").onclick=async()=>{$("#os").textContent="";if(!priv())return $("#os").textContent="أنشئ المفاتيح أولاً";
+ const nm=$("#nm").value.trim(),dv=norm($("#dv").value);if(!nm||dv.length!==12)return $("#os").textContent="اكتب اسم الزبون ورقم جهاز من 12 خانة";
+ const mo=+$("#du").value,d=new Date();let ex="9999-12-31";if(mo){d.setDate(d.getDate()+Math.round(mo*30.4375));ex=d.toISOString().slice(0,10)}
+ $("#out").value=await makeCode(priv(),dv,ex,nm);const l=L();l.push({d:new Date().toISOString().slice(0,10),n:nm,v:dv,e:ex});LS.vl=JSON.stringify(l);log()};
+$("#cp").onclick=()=>{navigator.clipboard.writeText($("#out").value)};
+$("#wa").onclick=()=>{if($("#out").value)window.open("https://wa.me/?text="+encodeURIComponent("كود تفعيل البرنامج:\n"+$("#out").value),"_blank")};
+ks();log();
+</script></body></html>
